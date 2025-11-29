@@ -1,0 +1,18 @@
+const SOCKET_URL = "{{SOCKET_URL}}";
+const NOVNC_URL = "{{NOVNC_URL}}";
+
+const socket = io(SOCKET_URL);
+const container = document.getElementById('novnc_container');
+const rfb = new RFB(container, NOVNC_URL, { credentials: { password: 'collab' } });
+rfb.viewOnly = true;
+
+document.getElementById('request').addEventListener('click', () => {
+  socket.emit('request_control');
+});
+
+socket.on('control_granted', () => {
+  alert('Masz kontrolę!');
+  rfb.viewOnly = false;
+});
+
+socket.on('queued', n => alert('Jesteś w kolejce: ' + n));
