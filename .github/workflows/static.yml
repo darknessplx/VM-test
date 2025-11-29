@@ -1,0 +1,49 @@
+name: Start CollabVM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collabvm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y docker.io curl unzip jq
+
+      - name: Build Docker VM
+        run: docker build -t collabvm ./docker
+
+      - name: Run Docker VM
+        run: docker run -d --name collabvm -p 5900:5900 -p 6080:6080 collabvm
+
+      - name: Install ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+
+      - name: Authenticate ngrok
+        run: ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Start ngrok tunnel
+        run: |
+          nohup ngrok http 6080 --log=stdout > ngrok.log 2>&1 &
+          sleep 5
+          export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+          echo "Public ngrok URL: $NGROK_URL"
+
+      - name: Generate frontend main.js
+        run: |
+          SOCKET_URL="${NGROK_URL}"        # Socket.IO używa tego samego URL w prostym setupie
+          NOVNC_URL="${NGROK_URL.replace('http','ws')}" # zamień http → ws
+          sed -e "s|{{SOCKET_URL}}|$SOCKET_URL|g" \
+              -e "s|{{NOVNC_URL}}|$NOVNC_URL|g" \
+              public/main.js.template > public/main.js
+
+      - name: Done
+        run: echo "CollabVM uruchomione. Skopiuj URL z logów Actions do przeglądarki."
